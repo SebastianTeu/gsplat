@@ -1,24 +1,14 @@
 #pragma once
-
-#include <cstdint>
-
-namespace at {
-class Tensor;
-}
+#include <torch/extension.h>
 
 namespace gsplat {
 
 void launch_ood_filter_kernel(
-    // inputs
-    const at::Tensor means,
-    const at::Tensor quats,
-    const at::Tensor scales,
-    const at::Tensor viewmats,
+    const at::Tensor means,        // [..., N, 3]
+    const at::Tensor quats,        // [..., N, 4]
+    const at::Tensor visibility,   // [N]
     float threshold,
-
-    // outputs
-    at::Tensor used_count,
-    at::Tensor reject_count
+    at::Tensor render_mask         // [N]
 );
 
 } // namespace gsplat

@@ -27,6 +27,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("adam", &gsplat::adam);
     m.def("relocation", &gsplat::relocation);
 
+    m.def("ood_filter_radii", &gsplat::ood_filter_radii);
+
     m.def("intersect_tile", &gsplat::intersect_tile);
     m.def("intersect_offset", &gsplat::intersect_offset);
 

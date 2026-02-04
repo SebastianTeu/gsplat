@@ -147,6 +147,20 @@ def adam(
         param, param_grad, exp_avg, exp_avg_sq, valid, lr, b1, b2, eps
     )
 
+def ood_filter_radii(
+    means: Tensor,  # [..., N, 3]
+    quats: Tensor,  # [..., N, 4]
+    radii: Tensor,   # [..., N]
+    visibility: Tensor,   # [N] bool
+    threshold: float,
+) -> Tensor:
+    """
+    Render-only OOD filtering. Gaussians failing the test will have radii set to 0.
+    """
+    return _make_lazy_cuda_func("ood_filter_radii")(
+        means, quats, radii, visibility, threshold,
+    )
+
 
 def spherical_harmonics(
     degrees_to_use: int,

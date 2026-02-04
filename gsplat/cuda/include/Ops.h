@@ -182,6 +182,15 @@ void adam(
     const float eps
 );
 
+// Filter to remove unstable gaussians
+void ood_filter_radii(
+    const at::Tensor means,         // [..., N, 3]
+    const at::Tensor quats,         // [..., N, 4]
+    at::Tensor radii,               // [..., N]
+    const at::Tensor visibility,    // [N] bool
+    float threshold
+);
+
 // GS Tile Intersection
 std::tuple<at::Tensor, at::Tensor, at::Tensor> intersect_tile(
     const at::Tensor means2d,                    // [..., C, N, 2] or [nnz, 2]

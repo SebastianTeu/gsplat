@@ -16,6 +16,7 @@ from .cuda._wrapper import (
     fully_fused_projection_with_ut,
     isect_offset_encode,
     isect_tiles,
+    ood_filter_radii,
     rasterize_to_pixels,
     rasterize_to_pixels_2dgs,
     rasterize_to_pixels_eval3d,
@@ -118,6 +119,7 @@ def rasterization(
     near_plane: float = 0.01,
     far_plane: float = 1e10,
     radius_clip: float = 0.0,
+    ood_threshold: Optional[float] = None,
     eps2d: float = 0.3,
     sh_degree: Optional[int] = None,
     packed: bool = True,
@@ -519,6 +521,21 @@ def rasterization(
     else:
         # The results are with shape [..., C, N, ...]. Only the elements with radii > 0 are valid.
         radii, means2d, depths, conics, compensations = proj_results
+
+        # OOD Filter
+        
+        visibility = radii.any(dim=-1).any(dim=0)  # [N], bool
+        # print("Visibility: ", visibility)
+        # print(visibility.dtype, visibility.device, visibility.shape)
+        if ood_threshold is not None:
+            ood_filter_radii(
+                means=means,
+                quats=quats,
+                radii=radii,
+                visibility=visibility,
+                threshold=ood_threshold,
+            )
+        
         opacities = torch.broadcast_to(
             opacities[..., None, :], batch_dims + (C, N)
         )  # [..., C, N]
