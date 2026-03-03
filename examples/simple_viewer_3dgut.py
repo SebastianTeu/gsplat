@@ -193,7 +193,6 @@ def main(local_rank: int, world_rank, world_size: int, args):
             render_mode="RGB",
             # this is to speedup large-scale rendering by skipping far-away Gaussians.
             radius_clip=3,
-            ood_threshold=args.ood_threshold,
             camera_model=gui_dropdown_camera_type.value,  # "pinhole" or "fisheye"
             with_ut=gui_ckeckbox_3dgut.value,
             with_eval3d=gui_ckeckbox_3dgut.value,
@@ -271,9 +270,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--port", type=int, default=8080, help="port for the viewer server"
-    )
-    parser.add_argument(
-        "--ood_threshold", type=float, default=None, help="OOD filtering threshold (None disables filtering)",
     )
     parser.add_argument("--backend", type=str, default="gsplat", help="gsplat, inria")
     args = parser.parse_args()

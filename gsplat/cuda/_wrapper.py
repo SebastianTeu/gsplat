@@ -147,18 +147,36 @@ def adam(
         param, param_grad, exp_avg, exp_avg_sq, valid, lr, b1, b2, eps
     )
 
-def ood_filter_radii(
+def ood_filter(
     means: Tensor,  # [..., N, 3]
     quats: Tensor,  # [..., N, 4]
-    radii: Tensor,   # [..., N]
-    visibility: Tensor,   # [N] bool
-    threshold: float,
+    scales: Tensor, # [..., N, 3]
+    opacities: Tensor,  # [..., N]
+    viewmat: Tensor,  # [4, 4]
+    K: Tensor,  # [..., 3, 3]
+    W: int,  
+    H: int,
+    xg_thresh: float = 0.01,
+    nx: int = 10,
+    ny: int = 10,
+    near_plane: float = 0.01,
 ) -> Tensor:
     """
-    Render-only OOD filtering. Gaussians failing the test will have radii set to 0.
+    OOD filtering for unstable gaussians
     """
-    return _make_lazy_cuda_func("ood_filter_radii")(
-        means, quats, radii, visibility, threshold,
+    return _make_lazy_cuda_func("ood_filter")(
+        means.contiguous(),
+        quats.contiguous(),
+        scales.contiguous(),
+        opacities.contiguous(),
+        viewmat.contiguous(),
+        K.contiguous(),
+        W,
+        H,
+        xg_thresh,
+        nx,
+        ny,
+        near_plane,
     )
 
 

@@ -7,36 +7,47 @@
 
 namespace gsplat {
 
-void ood_filter_radii(
+std::tuple<at::Tensor, at::Tensor> ood_filter(
     const at::Tensor means,         // [..., N, 3]
     const at::Tensor quats,         // [..., N, 4]
-    at::Tensor radii,               // [..., N]
-    const at::Tensor visibility,    // [N] bool
-    float threshold
+    const at::Tensor scales,        // [..., N, 3]
+    const at::Tensor opacities,     // [..., N]
+    const at::Tensor viewmat,       // [..., 4, 4]
+    const at::Tensor K,             // [..., 3, 3]
+    const int W,
+    const int H,
+    const float xg_thresh,
+    const int nx,
+    const int ny,
+    const float near_plane
 ) 
 {
     DEVICE_GUARD(means);
     CHECK_INPUT(means);
     CHECK_INPUT(quats);
-    CHECK_INPUT(radii);
-    CHECK_INPUT(visibility);
+    CHECK_INPUT(scales);
+    CHECK_INPUT(opacities);
+    CHECK_INPUT(K);
 
-    TORCH_CHECK(visibility.dim() == 1);
-    TORCH_CHECK(visibility.size(0) == means.size(0));
-    TORCH_CHECK(visibility.scalar_type() == torch::kBool);
-
-    auto render_mask = visibility.clone();
-
-    launch_ood_filter_kernel(
+    auto reject_counts = at::zeros(opacities.sizes(), at::dtype(torch::kInt32).device(means.device()));
+    auto total_counts = at::zeros(opacities.sizes(), at::dtype(torch::kInt32).device(means.device()));
+    launch_ood_filter_counts(
         means,
         quats,
-        visibility,
-        threshold,
-        render_mask
+        scales,
+        opacities,
+        viewmat,
+        K,
+        W,
+        H,
+        xg_thresh,
+        nx,
+        ny,
+        near_plane,
+        reject_counts,
+        total_counts
     );
-
-    auto mask = render_mask.view({1, -1, 1}).expand_as(radii);
-    radii.masked_fill_(~mask, 0);
+    return std::make_tuple(reject_counts, total_counts);
 }
 
 } // namespace gsplat

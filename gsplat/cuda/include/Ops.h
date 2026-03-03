@@ -182,13 +182,20 @@ void adam(
     const float eps
 );
 
-// Filter to remove unstable gaussians
-void ood_filter_radii(
-    const at::Tensor means,         // [..., N, 3]
-    const at::Tensor quats,         // [..., N, 4]
-    at::Tensor radii,               // [..., N]
-    const at::Tensor visibility,    // [N] bool
-    float threshold
+// Filter to remove unstable gaussians from out-of-distribution cameras
+std::tuple<at::Tensor, at::Tensor> ood_filter(
+    const at::Tensor means,
+    const at::Tensor quats,
+    const at::Tensor scales,
+    const at::Tensor opacities,
+    const at::Tensor viewmat,
+    const at::Tensor K,
+    const int W,
+    const int H,
+    const float xg_thresh,
+    const int nx,
+    const int ny,
+    const float near_plane
 );
 
 // GS Tile Intersection
