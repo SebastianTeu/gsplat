@@ -160,9 +160,31 @@ def ood_filter(
     nx: int = 10,
     ny: int = 10,
     near_plane: float = 0.01,
-) -> Tensor:
+) -> Tuple[Tensor, Tensor]:
     """
-    OOD filtering for unstable gaussians
+    OOD filtering for unstable gaussians. For a given camera pose, this function identifies the unstable gaussians
+    that are likely to cause severe artifacts in the rendered image, and returns a tuple of (reject_counts, total_counts).
+    For more details please refer to the paper:
+    # `Extreme Views: 3DGS Filter for Novel View Synthesis from Out-of-Distribution Camera Poses <https://arxiv.org/pdf/2510.20027>`.
+
+    Args:
+        means: Gaussian means. [N, 3]
+        quats: Gaussian quaternions. [N, 4]
+        scales: Gaussian scales. [N, 3]
+        opacities: Gaussian opacities. [N]
+        viewmat: Camera view matrix. [4, 4]
+        K: Camera intrinsics. [3, 3]
+        W: Image width.
+        H: Image height.
+        xg_thresh: Threshold for sensitivity metric
+        nx: Number of rays in x direction for sampling
+        ny: Number of rays in y direction for sampling
+        near_plane: Near plane distance
+
+    Returns:
+        A tuple of (reject_counts, total_counts):
+        - reject_counts: Number of times each gaussian is rejected by a ray. [N]
+        - total_counts: Number of times each gaussian is hit by a ray. [N]
     """
     return _make_lazy_cuda_func("ood_filter")(
         means.contiguous(),

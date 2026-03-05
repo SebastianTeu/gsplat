@@ -1,6 +1,5 @@
 import math
 import argparse
-import os
 
 from gsplat.cuda._wrapper import (
     ood_filter,
@@ -8,24 +7,26 @@ from gsplat.cuda._wrapper import (
 
 import tqdm
 import torch
-import torch.nn.functional as F
+from torch import Tensor
+import torch.nn.functional as F 
+from typing import Tuple, Optional
 
 from gsplat.distributed import cli
 
 def compute_gaussian_instability(
-    means,
-    quats,
-    scales,
-    opacities,
-    viewmat,
-    K,
-    W,
-    H,
-    xg_thresh=0.02,
-    nx=5,
-    ny=5,
-    near_plane=0.01,
-):
+    means: Tensor,
+    quats: Tensor,
+    scales: Tensor,
+    opacities: Tensor,
+    viewmat: Tensor,
+    K: Tensor,
+    W: int,
+    H: int,
+    xg_thresh: float = 0.0000000000001,
+    nx: int = 100,
+    ny: int = 100,
+    near_plane: float = 0.01,
+) -> Tuple[Tensor, Tensor]:
     means = means.contiguous()
     quats = quats.contiguous()
     scales = scales.contiguous()
@@ -34,21 +35,23 @@ def compute_gaussian_instability(
     viewmat = viewmat.contiguous()
 
     return ood_filter(
-        means,
-        quats,
-        scales,
-        opacities,
-        viewmat,
-        K,
-        W,
-        H,
-        xg_thresh,
-        nx,
-        ny,
-        near_plane,
+        means=means,
+        quats=quats,
+        scales=scales,
+        opacities=opacities,
+        viewmat=viewmat,
+        K=K,
+        W=W,
+        H=H,
+        xg_thresh=xg_thresh,
+        nx=nx,
+        ny=ny,
+        near_plane=near_plane,
     )
 
-def look_at(device, cam_pos, target, up=torch.tensor([0., 0., 1.])):
+# Create a view matrix given camera position, target, and up vector
+def look_at(device: torch.device, cam_pos: Tensor, target: Tensor, up: Tensor = torch.tensor([0., 0., 1.])
+) -> Tensor:
     up = up.to(device)
     forward = F.normalize(target - cam_pos, dim=0)
     right   = F.normalize(torch.cross(forward, up, dim=0), dim=0)
@@ -62,16 +65,24 @@ def look_at(device, cam_pos, target, up=torch.tensor([0., 0., 1.])):
     return viewmat
 
 def compute_instability_mask(
-    device,
-    means,
-    quats,
-    scales,
-    opacities,
-    xg_thresh=0.02,
-    ratio_thresh=0.01,
-    nx=5,
-    ny=5,
-):
+    device: torch.device,
+    means: Tensor,                          # [N, 3]
+    quats: Tensor,                          # [N, 4]
+    scales: Tensor,                         # [N, 3]
+    opacities: Tensor,                      # [N]
+    xg_thresh: float = 0.0000000000001,
+    ratio_thresh: float = 0.01,
+    nx: int = 100,
+    ny: int = 100,
+    near_plane: Optional[float] = None,
+) -> Tensor:
+    
+    assert means.shape[0] == quats.shape[0] == scales.shape[0] == opacities.shape[0], "All Gaussian parameter tensors must have the same number of Gaussians"
+    assert means.ndim == 2 and means.shape[1] == 3
+    assert quats.ndim == 2 and quats.shape[1] == 4
+    assert scales.ndim == 2 and scales.shape[1] == 3
+    assert opacities.ndim == 1
+
     # Compute scene center and radius from Gaussian means
     with torch.no_grad():
         scene_center = means.mean(dim=0)  # [3]
@@ -85,6 +96,10 @@ def compute_instability_mask(
         [0.,  fy, H/2],
         [0.,  0., 1. ]
     ], dtype=torch.float32, device=device)
+
+    # Default near plane based on scene radius if not provided
+    if(near_plane is None):
+        near_plane = scene_radius * 0.05
 
     N = len(means)
     reject_counts = torch.zeros(N, dtype=torch.int32, device=device)
@@ -117,14 +132,18 @@ def compute_instability_mask(
                 viewmat = look_at(device, cam_pos, scene_center)
 
                 r, t = compute_gaussian_instability(
-                    means, quats, scales, opacities,
+                    means=means,
+                    quats=quats,
+                    scales=scales,
+                    opacities=opacities,
                     viewmat=viewmat,
                     K=K_synth,
-                    W=W, H=H,
+                    W=W,
+                    H=H,
                     xg_thresh=xg_thresh,
                     nx=nx,
                     ny=ny,
-                    near_plane=scene_radius * 0.05,
+                    near_plane=near_plane,
                 )
                 reject_counts += r
                 total_counts  += t
@@ -145,13 +164,18 @@ def compute_instability_mask(
 
         viewmat = look_at(device, cam_pos, look_target)
         r, t = compute_gaussian_instability(
-            means, quats, scales, opacities,
+            means=means,
+            quats=quats,
+            scales=scales,
+            opacities=opacities,
             viewmat=viewmat,
             K=K_synth,
-            W=W, H=H,
+            W=W,
+            H=H,
             xg_thresh=xg_thresh,
-            nx=nx, ny=ny,
-            near_plane=scene_radius * 0.05
+            nx=nx,
+            ny=ny,
+            near_plane=near_plane
         )
         reject_counts += r
         total_counts  += t
@@ -166,7 +190,7 @@ def compute_instability_mask(
     print(f"Pruning {unstable_mask.sum()} unstable gaussians")
     return unstable_mask
 
-def main(local_rank: int, world_rank, world_size: int, args):
+def main(local_rank: int, world_rank: int, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
@@ -207,11 +231,14 @@ def main(local_rank: int, world_rank, world_size: int, args):
         quats=quats,
         scales=scales,
         opacities=opacities,
-        xg_thresh=0.000000000001,
-        ratio_thresh=0.01,
-        nx=100,
-        ny=100,
+        xg_thresh=args.xg_thresh,
+        ratio_thresh=args.ratio_thresh,
+        nx=args.nx,
+        ny=args.ny,
+        near_plane=args.near_plane
     )
+
+    # Filter out unstable Gaussians based on the computed mask
     filtered_means       = means[~unstable_mask]
     filtered_quats       = original_quats[~unstable_mask]
     filtered_scales      = original_scales[~unstable_mask]
@@ -221,7 +248,7 @@ def main(local_rank: int, world_rank, world_size: int, args):
     print("Number of Gaussians after filter:", len(filtered_means))
 
     # Saving the filtered Gaussians back to a new checkpoint
-    output_ckpt_path = args.ckpt.replace(".pt", "_filtered.pt")
+    output_ckpt_path = args.ckpt.replace(".pt", f"_{len(filtered_means)}_filtered.pt")
     torch.save({
         "splats": {
             "means": filtered_means,
@@ -233,7 +260,6 @@ def main(local_rank: int, world_rank, world_size: int, args):
         }
     }, output_ckpt_path)
     print(f"Filtered checkpoint saved to: {output_ckpt_path}")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -251,6 +277,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ny", type=int, default=100, help="number of pixels to sample along y-axis for instability evaluation"
+    )
+    parser.add_argument(
+        "--near_plane", type=float, default=None, help="near plane for instability evaluation"
     )
     args = parser.parse_args()
     cli(main, args)

@@ -182,19 +182,21 @@ void adam(
     const float eps
 );
 
-// Filter to remove unstable gaussians from out-of-distribution cameras
+// Filter to remove unstable gaussians from out-of-distribution cameras. Will return a tuple of two 
+// tensors: (reject_counts, total_counts), which can be used to compute the rejection ratio for each gaussian.
+// Based on the Extreme Views paper: https://arxiv.org/pdf/2510.20027
 std::tuple<at::Tensor, at::Tensor> ood_filter(
-    const at::Tensor means,
-    const at::Tensor quats,
-    const at::Tensor scales,
-    const at::Tensor opacities,
-    const at::Tensor viewmat,
-    const at::Tensor K,
-    const int W,
-    const int H,
-    const float xg_thresh,
-    const int nx,
-    const int ny,
+    const at::Tensor means,     // [N, 3]
+    const at::Tensor quats,     // [N, 4]
+    const at::Tensor scales,    // [N, 3]
+    const at::Tensor opacities, // [N]
+    const at::Tensor viewmat,   // [4, 4]
+    const at::Tensor K,         // [3, 3]
+    const int W,                // width
+    const int H,                // height
+    const float xg_thresh,      // threshold for instability metric
+    const int nx,               // number of rays in x direction for sampling
+    const int ny,               // number of rays in y direction for sampling
     const float near_plane
 );
 
