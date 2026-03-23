@@ -226,6 +226,7 @@ __global__ void ood_filter_kernel(
         atomicAdd(&total_counts[i], 1);
         if (xg_thresh > 0.f && gs_xg > xg_thresh)
             atomicAdd(&reject_counts[i], 1);
+            continue; // Seeing if this will improve wall and ceiling removal
 
         update_sum_xg(sum_xg, x_g, myAlpha);
         myT *= (1.f - myAlpha);
