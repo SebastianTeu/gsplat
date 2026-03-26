@@ -224,9 +224,10 @@ __global__ void ood_filter_kernel(
         float gs_xg = compute_gs_xg(x_g, myAlpha, myT, sum_xg);
 
         atomicAdd(&total_counts[i], 1);
-        if (xg_thresh > 0.f && gs_xg > xg_thresh)
+        if (xg_thresh > 0.f && gs_xg > xg_thresh) {
             atomicAdd(&reject_counts[i], 1);
-            continue; // Seeing if this will improve wall and ceiling removal
+            continue; // Don't update sum_xg or transmittance variables for rejected Gaussians
+        }
 
         update_sum_xg(sum_xg, x_g, myAlpha);
         myT *= (1.f - myAlpha);
