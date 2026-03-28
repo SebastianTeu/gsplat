@@ -16,7 +16,6 @@ from gsplat.distributed import cli
 def compute_gaussian_instability(
     means: Tensor,
     quats: Tensor,
-    scales: Tensor,
     opacities: Tensor,
     viewmat: Tensor,
     K: Tensor,
@@ -29,7 +28,6 @@ def compute_gaussian_instability(
 ) -> Tuple[Tensor, Tensor]:
     means = means.contiguous()
     quats = quats.contiguous()
-    scales = scales.contiguous()
     opacities = opacities.contiguous()
     K = K.contiguous()
     viewmat = viewmat.contiguous()
@@ -38,7 +36,6 @@ def compute_gaussian_instability(
     return ood_filter(
         means=means,
         quats=quats,
-        scales=scales,
         opacities=opacities,
         viewmat=viewmat,
         K=K,
@@ -132,7 +129,6 @@ def compute_instability_mask(
     device: torch.device,
     means: Tensor,                          # [N, 3]
     quats: Tensor,                          # [N, 4]
-    scales: Tensor,                         # [N, 3]
     opacities: Tensor,                      # [N]
     xg_thresh: float = 1e-13,
     ratio_thresh: float = 0.01,
@@ -145,10 +141,9 @@ def compute_instability_mask(
     num_cameras_per_slice: int = 8,
 ) -> Tensor:
     
-    assert means.shape[0] == quats.shape[0] == scales.shape[0] == opacities.shape[0], "All Gaussian parameter tensors must have the same number of Gaussians"
+    assert means.shape[0] == quats.shape[0] == opacities.shape[0], "All Gaussian parameter tensors must have the same number of Gaussians"
     assert means.ndim == 2 and means.shape[1] == 3
     assert quats.ndim == 2 and quats.shape[1] == 4
-    assert scales.ndim == 2 and scales.shape[1] == 3
     assert opacities.ndim == 1
 
     N = len(means)
@@ -190,7 +185,7 @@ def compute_instability_mask(
     for cam_pos in exterior_positions:
         viewmat = look_at(device, cam_pos, center) # Looking at the scene center
         r, t = compute_gaussian_instability(
-            means=means, quats=quats, scales=scales, opacities=opacities,
+            means=means, quats=quats, opacities=opacities,
             viewmat=viewmat, K=K_synth, W=W, H=H,
             xg_thresh=xg_thresh, nx=nx, ny=ny, near_plane=near_plane,
         )
@@ -210,7 +205,7 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
-    means, quats, scales, opacities, sh0, shN = [], [], [], [], [], []
+    means, quats, opacities, sh0, shN = [], [], [], [], []
 
     # Quats, scales, and opacities are stored in the checkpoint in their unnormalized/log space form, 
     # so we need to keep track of the original values to save the filtered checkpoint correctly
@@ -219,7 +214,6 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
     ckpt = torch.load(args.ckpt, map_location=device)["splats"]
     means.append(ckpt["means"])
     quats.append(F.normalize(ckpt["quats"], p=2, dim=-1))
-    scales.append(torch.exp(ckpt["scales"]))
     opacities.append(torch.sigmoid(ckpt["opacities"]))
     sh0.append(ckpt["sh0"])
     shN.append(ckpt["shN"])
@@ -230,7 +224,6 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
     
     means = torch.cat(means, dim=0)
     quats = torch.cat(quats, dim=0)
-    scales = torch.cat(scales, dim=0)
     opacities = torch.cat(opacities, dim=0)
     sh0 = torch.cat(sh0, dim=0)
     shN = torch.cat(shN, dim=0)
@@ -245,7 +238,6 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
         device=device,
         means=means,
         quats=quats,
-        scales=scales,
         opacities=opacities,
         xg_thresh=args.xg_thresh,
         ratio_thresh=args.ratio_thresh,

@@ -10,7 +10,6 @@ namespace gsplat {
 std::tuple<at::Tensor, at::Tensor> ood_filter(
     const at::Tensor means,         // [N, 3]
     const at::Tensor quats,         // [N, 4]
-    const at::Tensor scales,        // [N, 3]
     const at::Tensor opacities,     // [N]
     const at::Tensor viewmat,       // [4, 4]
     const at::Tensor K,             // [3, 3]
@@ -25,7 +24,6 @@ std::tuple<at::Tensor, at::Tensor> ood_filter(
     DEVICE_GUARD(means);
     CHECK_INPUT(means);
     CHECK_INPUT(quats);
-    CHECK_INPUT(scales);
     CHECK_INPUT(opacities);
     CHECK_INPUT(K);
 
@@ -34,7 +32,6 @@ std::tuple<at::Tensor, at::Tensor> ood_filter(
     launch_ood_filter_counts(
         means,
         quats,
-        scales,
         opacities,
         viewmat,
         K,

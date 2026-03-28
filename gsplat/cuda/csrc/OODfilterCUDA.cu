@@ -123,7 +123,6 @@ __global__ void ood_filter_kernel(
     const int ny,
     const scalar_t* __restrict__ means,         // [N, 3]
     const scalar_t* __restrict__ quats,         // [N, 4]
-    const scalar_t* __restrict__ scales,        // [N, 3]
     const scalar_t* __restrict__ opacities,     // [N]
     // Camera pose (world-space)
     const float cam_pos_x, const float cam_pos_y, const float cam_pos_z,
@@ -204,7 +203,6 @@ __global__ void ood_filter_kernel(
         float t = hit_t[h];
 
         float mean[3]  = {(float)means[i*3],   (float)means[i*3+1],   (float)means[i*3+2]};
-        float scale[3] = {(float)scales[i*3],  (float)scales[i*3+1],  (float)scales[i*3+2]};
         float quat[4]  = {(float)quats[i*4],   (float)quats[i*4+1],   (float)quats[i*4+2],  (float)quats[i*4+3]};
         float opacity  = (float)opacities[i];
 
@@ -242,7 +240,6 @@ __global__ void ood_filter_kernel(
 void launch_ood_filter_counts(
     const at::Tensor means,
     const at::Tensor quats,
-    const at::Tensor scales,
     const at::Tensor opacities,
     const at::Tensor viewmat,
     const at::Tensor K,
@@ -286,7 +283,6 @@ void launch_ood_filter_counts(
             N, num_rays, nx, ny,
             means.data_ptr<scalar_t>(),
             quats.data_ptr<scalar_t>(),
-            scales.data_ptr<scalar_t>(),
             opacities.data_ptr<scalar_t>(),
             cam_pos_x, cam_pos_y, cam_pos_z,
             c2w_r00, c2w_r01, c2w_r02,

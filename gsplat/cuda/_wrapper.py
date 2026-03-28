@@ -150,7 +150,6 @@ def adam(
 def ood_filter(
     means: Tensor,  # [..., N, 3]
     quats: Tensor,  # [..., N, 4]
-    scales: Tensor, # [..., N, 3]
     opacities: Tensor,  # [..., N]
     viewmat: Tensor,  # [4, 4]
     K: Tensor,  # [..., 3, 3]
@@ -170,7 +169,6 @@ def ood_filter(
     Args:
         means: Gaussian means. [N, 3]
         quats: Gaussian quaternions. [N, 4]
-        scales: Gaussian scales. [N, 3]
         opacities: Gaussian opacities. [N]
         viewmat: Camera view matrix. [4, 4]
         K: Camera intrinsics. [3, 3]
@@ -189,7 +187,6 @@ def ood_filter(
     return _make_lazy_cuda_func("ood_filter")(
         means.contiguous(),
         quats.contiguous(),
-        scales.contiguous(),
         opacities.contiguous(),
         viewmat.contiguous(),
         K.contiguous(),

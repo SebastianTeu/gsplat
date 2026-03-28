@@ -6,7 +6,6 @@ namespace gsplat {
 void launch_ood_filter_counts(
     const at::Tensor means,     // [N, 3]
     const at::Tensor quats,     // [N, 4]
-    const at::Tensor scales,    // [N, 3]
     const at::Tensor opacities, // [N]
     const at::Tensor viewmat,   // [4, 4]
     const at::Tensor K,         // [3, 3]
