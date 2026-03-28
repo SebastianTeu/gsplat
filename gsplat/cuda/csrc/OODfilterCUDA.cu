@@ -25,15 +25,17 @@ __device__ inline void quat_to_rotmat(const float q[4], float R[9]) {
     R[6] = 2*(x*z - w*y);      R[7] = 2*(y*z + w*x);      R[8] = 1 - 2*(x*x + y*y);
 }
 
-// Computes cam_local = S^{-1} R^T (cam_pos - mean)
-//          ray_local = S^{-1} R^T ray_d
+// Computes cam_local = R^T (cam_pos - mean)
+//          ray_local = R^T ray_d
 // then t = -dot(ray_local, cam_local) / dot(ray_local, ray_local)
 // Returns false if t <= 0.
-__device__ inline bool compute_t_local(
+//
+// t and x_g are both computed in the rotatation-only space, without scaling, for consistency
+// Calculating a scaled t with an unscaled x_g would mix spaces within the sensitivity metric
+__device__ inline bool compute_t_and_rot_locals(
     const float cam_pos[3],
     const float ray_d[3],
     const float mean[3],
-    const float scale[3],
     const float R[9],
     float& t_out,
     float cam_local[3],
@@ -51,14 +53,13 @@ __device__ inline bool compute_t_local(
             ro += R[c * 3 + r] * offset[c];   // R^T @ offset
             rr += R[c * 3 + r] * ray_d[c];    // R^T @ ray_d
         }
-        // Ignoring scaling as per the EV3DGS paper
         cam_local[r] = ro;
         ray_local[r] = rr;
     }
 
-    float myA = dot3(ray_local, ray_local);
-    float myB = 2.f * dot3(ray_local, cam_local);
-    float t   = -myB / (2.f * myA);
+    float a = dot3(ray_local, ray_local);
+    float b = 2.f * dot3(ray_local, cam_local);
+    float t   = -b / (2.f * a);
 
     if (t <= 0.f) return false;
     t_out = t;
@@ -73,29 +74,29 @@ __device__ inline void compute_xg(
     x_g[2] = cam_local[2] + t * ray_local[2];
 }
 
-__device__ inline float compute_alpha(const float x_g[3], float opacity) {
-    float myPow = fminf(-0.5f * dot3(x_g, x_g), 0.f);
-    return fminf(0.99f, opacity * expf(myPow));
+__device__ inline float compute_alpha_rot(const float x_g[3], float opacity) {
+    float pow = fminf(-0.5f * dot3(x_g, x_g), 0.f);
+    return fminf(0.99f, opacity * expf(pow));
 }
 
-__device__ inline float compute_gs_xg(
-    const float x_g[3], float myAlpha, float myT, const float sum_xg[3]
+__device__ inline float compute_instability(
+    const float x_g[3], float alpha_rot, float T_sensitivity, const float mean_xg[3]
 ) {
     float d[3] = {
-        myAlpha * myT * (sum_xg[0] - x_g[0]),
-        myAlpha * myT * (sum_xg[1] - x_g[1]),
-        myAlpha * myT * (sum_xg[2] - x_g[2])
+        alpha_rot * T_sensitivity * (mean_xg[0] - x_g[0]),
+        alpha_rot * T_sensitivity * (mean_xg[1] - x_g[1]),
+        alpha_rot * T_sensitivity * (mean_xg[2] - x_g[2])
     };
     return dot3(d, d);
 }
 
-__device__ inline void update_sum_xg(
-    float sum_xg[3], const float x_g[3], float myAlpha
+__device__ inline void update_mean_xg(
+    float mean_xg[3], const float x_g[3], float alpha_rot
 ) {
-    float w = myAlpha / (1.f - myAlpha);
-    sum_xg[0] += w * x_g[0];
-    sum_xg[1] += w * x_g[1];
-    sum_xg[2] += w * x_g[2];
+    float w = alpha_rot / (1.f - alpha_rot);
+    mean_xg[0] += w * x_g[0];
+    mean_xg[1] += w * x_g[1];
+    mean_xg[2] += w * x_g[2];
 }
 
 __device__ inline void insertion_sort(float* ts, int* ids, int n) {
@@ -174,14 +175,13 @@ __global__ void ood_filter_kernel(
 
     for (int i = 0; i < N; i++) {
         float mean[3]  = {(float)means[i*3],   (float)means[i*3+1],   (float)means[i*3+2]};
-        float scale[3] = {(float)scales[i*3],  (float)scales[i*3+1],  (float)scales[i*3+2]};
         float quat[4]  = {(float)quats[i*4],   (float)quats[i*4+1],   (float)quats[i*4+2],  (float)quats[i*4+3]};
 
         float R[9];
         quat_to_rotmat(quat, R);
 
         float t, cam_local[3], ray_local[3];
-        if (!compute_t_local(cam_pos, ray_d, mean, scale, R, t, cam_local, ray_local))
+        if (!compute_t_and_rot_locals(cam_pos, ray_d, mean, R, t, cam_local, ray_local))
             continue;
         if (t <= near_plane)
             continue;
@@ -196,8 +196,8 @@ __global__ void ood_filter_kernel(
     insertion_sort(hit_t, hit_id, num_hits);
 
     // Score each (ray, gaussian) pair
-    float sum_xg[3] = {0.f, 0.f, 0.f};
-    float myT = 1.f;
+    float mean_xg[3] = {0.f, 0.f, 0.f};
+    float T_sensitivity = 1.f;
 
     for (int h = 0; h < num_hits; h++) {
         int   i = hit_id[h];
@@ -212,27 +212,29 @@ __global__ void ood_filter_kernel(
         quat_to_rotmat(quat, R);
 
         float cam_local[3], ray_local[3], t_dummy;
-        compute_t_local(cam_pos, ray_d, mean, scale, R, t_dummy, cam_local, ray_local);
+        compute_t_and_rot_locals(cam_pos, ray_d, mean, R, t_dummy, cam_local, ray_local);
 
         float x_g[3];
         compute_xg(cam_local, ray_local, t, x_g);
 
-        float myAlpha = compute_alpha(x_g, opacity);
-        if (myAlpha < 1.f / 255.f)
+        float alpha_rot = compute_alpha_rot(x_g, opacity);
+        if (alpha_rot < 1.f / 255.f)
             continue;
 
-        float gs_xg = compute_gs_xg(x_g, myAlpha, myT, sum_xg);
+        float instability = compute_instability(x_g, alpha_rot, T_sensitivity, mean_xg);
 
+        // If Gaussian is unstable, don't update mean_xg or transmittance variables for rejected Gaussians
+        // This is so unstable Gaussians don't occlude geometry behind them
         atomicAdd(&total_counts[i], 1);
-        if (xg_thresh > 0.f && gs_xg > xg_thresh) {
+        if (xg_thresh > 0.f && instability > xg_thresh) {
             atomicAdd(&reject_counts[i], 1);
-            continue; // Don't update sum_xg or transmittance variables for rejected Gaussians
+            continue;
         }
 
-        update_sum_xg(sum_xg, x_g, myAlpha);
-        myT *= (1.f - myAlpha);
+        update_mean_xg(mean_xg, x_g, alpha_rot);
+        T_sensitivity *= (1.f - alpha_rot);
 
-        if (myT < 0.0001f)
+        if (T_sensitivity < 0.0001f)
             break;
     }
 }
