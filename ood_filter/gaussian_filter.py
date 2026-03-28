@@ -205,32 +205,19 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
     torch.manual_seed(42)
     device = torch.device("cuda", local_rank)
 
-    means, quats, opacities, sh0, shN = [], [], [], [], []
+    ckpt = torch.load(args.ckpt, map_location=device)["splats"]
+
+    means       = ckpt["means"]
+    quats       = F.normalize(ckpt["quats"], p=2, dim=-1)
+    opacities   = torch.sigmoid(ckpt["opacities"])
+    sh0         = ckpt["sh0"]
+    shN         = ckpt["shN"]
 
     # Quats, scales, and opacities are stored in the checkpoint in their unnormalized/log space form, 
     # so we need to keep track of the original values to save the filtered checkpoint correctly
-    original_quats, original_scales, original_opacities = [], [], []
-
-    ckpt = torch.load(args.ckpt, map_location=device)["splats"]
-    means.append(ckpt["means"])
-    quats.append(F.normalize(ckpt["quats"], p=2, dim=-1))
-    opacities.append(torch.sigmoid(ckpt["opacities"]))
-    sh0.append(ckpt["sh0"])
-    shN.append(ckpt["shN"])
-
-    original_quats.append(ckpt["quats"])
-    original_scales.append(ckpt["scales"])
-    original_opacities.append(ckpt["opacities"])
-    
-    means = torch.cat(means, dim=0)
-    quats = torch.cat(quats, dim=0)
-    opacities = torch.cat(opacities, dim=0)
-    sh0 = torch.cat(sh0, dim=0)
-    shN = torch.cat(shN, dim=0)
-
-    original_quats = torch.cat(original_quats, dim=0)
-    original_scales = torch.cat(original_scales, dim=0)
-    original_opacities = torch.cat(original_opacities, dim=0)
+    original_quats      = ckpt["quats"]
+    original_scales     = ckpt["scales"]
+    original_opacities  = ckpt["opacities"]
 
     print("Number of Gaussians before filter:", len(means))
 
