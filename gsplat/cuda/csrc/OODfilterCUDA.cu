@@ -27,17 +27,11 @@ __device__ inline void quat_to_rotmat(const float q[4], float R[9]) {
 
 // Computes cam_local = R^T (cam_pos - mean)
 //          ray_local = R^T ray_d
-// then t = -dot(ray_local, cam_local) / dot(ray_local, ray_local)
-// Returns false if t <= 0.
-//
-// t and x_g are both computed in the rotatation-only space, without scaling, for consistency
-// Calculating a scaled t with an unscaled x_g would mix spaces within the sensitivity metric
-__device__ inline bool compute_t_and_rot_locals(
+__device__ inline void compute_rot_locals(
     const float cam_pos[3],
     const float ray_d[3],
     const float mean[3],
     const float R[9],
-    float& t_out,
     float cam_local[3],
     float ray_local[3]
 ) {
@@ -56,7 +50,17 @@ __device__ inline bool compute_t_and_rot_locals(
         cam_local[r] = ro;
         ray_local[r] = rr;
     }
+}
 
+// t = -dot(ray_local, cam_local) / dot(ray_local, ray_local)
+// Returns false if t <= 0.
+__device__ inline bool compute_t(
+    const float cam_local[3],
+    const float ray_local[3],
+    float& t_out
+) {
+    // t and x_g are both computed in the rotatation-only space, without scaling, for consistency
+    // Calculating a scaled t with an unscaled x_g would mix spaces within the sensitivity metric
     float a = dot3(ray_local, ray_local);
     float b = 2.f * dot3(ray_local, cam_local);
     float t   = -b / (2.f * a);
@@ -179,8 +183,10 @@ __global__ void ood_filter_kernel(
         float R[9];
         quat_to_rotmat(quat, R);
 
-        float t, cam_local[3], ray_local[3];
-        if (!compute_t_and_rot_locals(cam_pos, ray_d, mean, R, t, cam_local, ray_local))
+        float cam_local[3], ray_local[3];
+        compute_rot_locals(cam_pos, ray_d, mean, R, cam_local, ray_local);
+        float t;
+        if (!compute_t(cam_local, ray_local, t))
             continue;
         if (t <= near_plane)
             continue;
@@ -209,8 +215,8 @@ __global__ void ood_filter_kernel(
         float R[9];
         quat_to_rotmat(quat, R);
 
-        float cam_local[3], ray_local[3], t_dummy;
-        compute_t_and_rot_locals(cam_pos, ray_d, mean, R, t_dummy, cam_local, ray_local);
+        float cam_local[3], ray_local[3];
+        compute_rot_locals(cam_pos, ray_d, mean, R, cam_local, ray_local);
 
         float x_g[3];
         compute_xg(cam_local, ray_local, t, x_g);
