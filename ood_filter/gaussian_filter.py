@@ -249,11 +249,13 @@ def main(local_rank: int, world_rank: int, world_size: int, args):
     # Saving the filtered Gaussians back to a new checkpoint
     output_ckpt_path = args.ckpt.replace(
         ".pt",
-        f"_ood_r{args.ratio_thresh:g}"
-        f"_p{args.pca_percentile:g}"
-        f"_s{args.num_slices}x{args.num_cameras_per_slice}"
-        f"_e{'-'.join(map(str, args.ellipsoid_scalars))}"
-        f"_n{len(filtered_means)}.pt"
+        f"_ood"
+        f"_count-{len(filtered_means)}"
+        f"_xg-{args.xg_thresh:g}"
+        f"_ratio-{args.ratio_thresh:g}"
+        f"_pca-{args.pca_percentile:g}"
+        f"_slices-{args.num_slices}x{args.num_cameras_per_slice}"
+        f"_ellipsoids-{'-'.join(map(str, args.ellipsoid_scalars))}.pt"
     )
 
     torch.save({
