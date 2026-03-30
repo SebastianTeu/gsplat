@@ -21,7 +21,7 @@ def compute_gaussian_instability(
     K: Tensor,
     W: int,
     H: int,
-    xg_thresh: float = 1e-13,
+    xg_thresh: float = 1e-4,
     nx: int = 100,
     ny: int = 100,
     near_plane: float = 0.01,
@@ -86,8 +86,8 @@ def sample_ellipsoid_cameras(
     center: Tensor,         # [3]
     axes: Tensor,           # [3, 3], row = PCA axis
     radii: Tensor,          # [3]
-    num_slices: int = 7,
-    num_cameras_per_slice: int = 8,
+    num_slices: int = 5,
+    num_cameras_per_slice: int = 6,
 ) -> list[Tensor]:
     
     device = center.device
@@ -130,15 +130,15 @@ def compute_instability_mask(
     means: Tensor,                          # [N, 3]
     quats: Tensor,                          # [N, 4]
     opacities: Tensor,                      # [N]
-    xg_thresh: float = 1e-13,
-    ratio_thresh: float = 0.01,
+    xg_thresh: float = 1e-4,
+    ratio_thresh: float = 0.25,
     nx: int = 100,
     ny: int = 100,
     near_plane: Optional[float] = None,
     percentile: float = 0.9,
     ellipsoid_scalars: list[float] = [2.0, 4.0],
-    num_slices: int = 7,
-    num_cameras_per_slice: int = 8,
+    num_slices: int = 5,
+    num_cameras_per_slice: int = 6,
 ) -> Tensor:
     
     assert means.shape[0] == quats.shape[0] == opacities.shape[0], "All Gaussian parameter tensors must have the same number of Gaussians"
@@ -276,10 +276,10 @@ if __name__ == "__main__":
         "--ckpt", type=str, required=True, default=None, help="path to the .pt file"
     )
     parser.add_argument(
-        "--xg_thresh", type=float, default=1e-13, help="threshold for Gaussian instability"
+        "--xg_thresh", type=float, default=1e-4, help="threshold for Gaussian instability"
     )
     parser.add_argument(
-        "--ratio_thresh", type=float, default=0.01, help="threshold for rejecting Gaussians based on instability ratio"
+        "--ratio_thresh", type=float, default=0.25, help="threshold for rejecting Gaussians based on instability ratio"
     )
     parser.add_argument(
         "--nx", type=int, default=100, help="number of rays to sample along x-axis for instability evaluation"
@@ -294,10 +294,10 @@ if __name__ == "__main__":
         "--ellipsoid_scalars", type=float, default=[2.0, 4.0], nargs="+", help="List of scalar multipliers applied to the given percentile PCA radii (e.g. 1.5 2.0, 4.0)"
     )
     parser.add_argument(
-        "--num_slices", type=int, default=7, help="number of horizontal ellipsoid slices to sample cameras from"
+        "--num_slices", type=int, default=5, help="number of horizontal ellipsoid slices to sample cameras from"
     )
     parser.add_argument(
-        "--num_cameras_per_slice", type=int, default=8, help="number of cameras equally spaced around each slice"
+        "--num_cameras_per_slice", type=int, default=6, help="number of cameras equally spaced around each slice"
     )
     parser.add_argument(
         "--pca_percentile", type=float, default=0.9, help="percentile of PCA radii to use for camera sampling"
